@@ -5,8 +5,11 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,20 +24,16 @@ public class MareeTools {
 	class HarmoniqueInfo {
 		double amplitude, phase;
 	}
+
+
 	
 	private static int _portIDInit = -1;
 	
 	
-	public List<Double> MarreGrammeduJour(long heure, int portId)
-	{
-		List<Double> horaires = new ArrayList<Double>();	
-		for (double i = 0.0; i < 24.0; i += 0.999)
-			horaires.add (i);
-			
-		List<Double> retour = getHauteurEau(horaires);
-		return retour;
-	}
 	
+	// --------------------------------------------------------
+	// hauteur d'eau a une heure donnee
+	// --------------------------------------------------------
 	public double ComputeHauteurMaree(long heure, int portId) throws IOException, E4AException {
 		if (!isHarmonicInitDone(portId))
 			initHarmonique (portId);
@@ -44,66 +43,208 @@ public class MareeTools {
 
 		Astronomie astrePosition = new Astronomie(heure);
 		Ondes.InitEquilibriumAndPhase (astrePosition.s, astrePosition.h, astrePosition.p, astrePosition.p1, astrePosition.N);
+		double heureDecimal = astrePosition.heureDecimale;
 
 		double var;
 		for (Onde o : Ondes._table2NC)
 		{
 			if (o._ampli > 0.)
 			{ 
-				var = Trigo.reduc360 (o._speed * astrePosition.Epoch2JourDecimal(heure) + o._equilibrium - o._phase);
+				var = Trigo.reduc360 (o._speed * heureDecimal + o._equilibrium - o._phase);
 				hauteur += o._nodeFactor * o._ampli * Trigo.cos_deg(var);
 			}
 		}
 		return hauteur;
 	}
 	
-
-
-	public void InfoMareeJour(List<Double> PM, List<Double> BM)
+	// -------------------
+	// idem mais en lot
+	// -------------------
+	public List<HoraireMaree> getHauteurEau(List<Long> horaire, int portId) throws IOException, E4AException
 	{
-		if ((PM == null) || (BM == null))
+		ArrayList<HoraireMaree> retour = new ArrayList<HoraireMaree>();	
+		for (long h : horaire) 
+		{
+			double a = this.ComputeHauteurMaree(h, portId);
+			HoraireMaree hm = new HoraireMaree(h, a);
+			retour.add(hm);
+		}
+		return retour;
+	}
+	
+	
+	
+	
+	// --------------------------------------------------------
+	// Besoin de la deribee pour la recherche des etales
+	// --------------------------------------------------------
+	private boolean signe_derivee(long heure, int portId) throws IOException, E4AException
+	{ 
+		if (!isHarmonicInitDone(portId))
+			initHarmonique (portId);
+		
+		Astronomie astrePosition = new Astronomie(heure);
+		Ondes.InitEquilibriumAndPhase (astrePosition.s, astrePosition.h, astrePosition.p, astrePosition.p1, astrePosition.N);
+		double heureDecimal = astrePosition.heureDecimale;
+
+		
+		double sens = 0.;
+		double var;
+
+		for (Onde o : Ondes._table2NC) {			
+			if (o._ampli > 0.)
+			{ 
+				// la derivée est de la forme -vsin(vt-p)
+				var = Trigo.reduc360 (o._speed * heureDecimal + o._equilibrium - o._phase);
+				sens -= o._nodeFactor * o._ampli * o._speed * Trigo.sin_deg(var);
+			}
+		}
+		
+		// return 1 si étale ou marée montante, 0 si marée descendante
+		return (sens >= 0.);
+	}
+	
+	
+	
+	
+	// --------------------------------------------------------
+	// recup de la sinusoide de l ajournee (debug ?)
+	// --------------------------------------------------------
+	public List<HoraireMaree> MarreGrammeduJour(long heure, int portId) throws IOException, E4AException
+	{
+		List<Long> horaires = new ArrayList<Long>();
+		GregorianCalendar gc = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+		gc.setTimeInMillis(heure);
+		for (int i = 0; i < 24; i++) {
+			gc.add(Calendar.HOUR, 1);
+			horaires.add (gc.getTimeInMillis());			
+		}
+			
+		List<HoraireMaree> retour = this.getHauteurEau(horaires, portId);
+		return retour;
+	}
+
+
+	
+	
+	
+	// --------------------------------------------------------
+	// Recherche a partir d'un horaire de la prochaine heure ou la maree va s'inverser
+	// --------------------------------------------------------
+	private long heureEtaleDeMaree(long EpochDebutDerecherche, int portId) throws IOException, E4AException // heure de la marée en heures de 0.0 a 23.99
+	{ 
+		/* 
+		 la hauteur de la maree est la fonction somme des composants,
+	     chaque composant étant de la forme acos(vt-p).
+	     La fonction dérivée =-vsin(vt-p) s'annule lorsque la fonction
+	     passe par un maxi (pleine mer) ou un mini (basse mer). Elle est
+	     positive lorsque la marée monte, et négative lorsque la marée
+	     descend. Plutôt que de rechercher les racines de la fonction dérivée,
+	     on a trouvé plus simple de procéder par approches successives.
+		 */
+
+		long t, dh;
+		// sens de la maree 1=maree montante 0=maree descendante
+		Boolean sens, sens0;
+
+		
+		//------------------------------------------------------------------------------
+		// est ce que je ne serais pas deja a l'etale ?
+		//------------------------------------------------------------------------------
+		dh = Trigo.DemiHeureEpoch;                       // une demi-heure en epoch
+		sens0 = signe_derivee(EpochDebutDerecherche, portId);	    // sens de la marée a l'instant initial
+		if (signe_derivee(EpochDebutDerecherche - Trigo.DemiMinuteEpoch, portId) !=  sens0) 
+			return EpochDebutDerecherche; // si sens inverse c'est que je l'ai trouvee
+
+		
+		//-----------------------------------------------------------------------------
+		// non alors je mouline de 1/2 heure en 1/2 heure jusqu'a l'etale
+		//-----------------------------------------------------------------------------
+		t = EpochDebutDerecherche;			                // on part de l'instant initial
+		do                            // on va regarder
+		{ 
+			t = t + dh;		            // les demi-heures suivantes
+			sens = signe_derivee(t, portId);    // quel est le sens de la marée
+		}
+		while (sens == sens0);	        // jusqu'à ce qu'elle change de sens
+		
+		// elle a changé de sens !
+		//-----------------------------------------------------------------------------
+		// OK j'y suis presque pour etre precis je vais mouliner en minute ce coup ci
+		//-----------------------------------------------------------------------------
+		sens0 = sens;	    	        // on note le nouveau sens
+		do			                // on revient en arriere
+		{ 
+			t = t - Trigo.UneMinuteEpoch;	        // minute par minute
+			sens = signe_derivee(t, portId);	// tant que le sens
+		}
+		while (sens == sens0);	        // est toujours le même
+		// on a atteint le sens précédent ! t est l'heure de la marée
+
+		// si 30 secondes après, la marée était toujours dans le même sens
+		// on prend la minute suivante comme heure de la marée
+		if (signe_derivee( t + Trigo.DemiMinuteEpoch, portId) == sens) 
+			t = t + Trigo.DemiMinuteEpoch;
+
+		return t;
+	}
+	
+	public List<Long> getHoraireEtale(long EpochDebutDerecherche, int portId) throws IOException, E4AException
+	{
+		ArrayList<Long> retour = new ArrayList<Long>();	
+
+		long h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
+		retour.add(h);
+
+		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
+		retour.add(h);
+		
+		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
+		retour.add(h);
+		
+		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
+		if ((h - EpochDebutDerecherche) < Trigo.JourneeComplete)
+			retour.add(h);
+		
+		return retour;
+	}
+	
+	// --------------------------------------------------------
+	// Info de la maree du jour BM / PM
+	// --------------------------------------------------------
+	public void InfoMareeJour(long EpochDebutDerecherche, int portId, List<HoraireMaree> oPM, List<HoraireMaree> oBM) throws IOException, E4AException
+	{
+		if ((oPM == null) || (oBM == null))
 			return;
 		
-		List<Double> horaires = getHoraireEtale();
-		List<Double> hauteur = getHauteurEau(horaires);
+		List<Long> horaires = getHoraireEtale(EpochDebutDerecherche, portId);
+		List<HoraireMaree> infoMaree = getHauteurEau(horaires, portId);
 		
-		if (hauteur.get(0) > hauteur.get(1))
+		if (infoMaree.get(0).hauteur > infoMaree.get(1).hauteur)
 		{
-			PM.add(horaires.get(0));
-			PM.add(hauteur.get(0));
-			
-			PM.add(horaires.get(2));
-			PM.add(hauteur.get(2));
+			oPM.add(infoMaree.get(0));			
+			oPM.add(infoMaree.get(2));
 				
-			BM.add(horaires.get(1));
-			BM.add(hauteur.get(1));
-			
-			if (hauteur.size() > 3)
-			{
-				BM.add(horaires.get(3));
-				BM.add(hauteur.get(3));
-			}
+			oBM.add(infoMaree.get(1));	
+			if (infoMaree.size() > 3)	
+				oBM.add(infoMaree.get(3));
 		}
 		else
 		{
-			BM.add(horaires.get(0));
-			BM.add(hauteur.get(0));
+			oBM.add(infoMaree.get(0));
+			oBM.add(infoMaree.get(2));			
 			
-			BM.add(horaires.get(2));			
-			BM.add(hauteur.get(2));	
+			oPM.add(infoMaree.get(1));
 			
-			PM.add(horaires.get(1));
-			PM.add(hauteur.get(1));
-			
-			if (hauteur.size() > 3)
-			{
-				PM.add(horaires.get(3));
-				PM.add(hauteur.get(3));
-			}
+			if (infoMaree.size() > 3)
+				oPM.add(infoMaree.get(3));
 		}
 	}
 	
-	public double getCoefMaree(double horairePM, double horaireBM)
+	public double getCoefMareeZarbi(long horairePM, long horaireBM, int portId) throws IOException, E4AException
 	{
 		/*
 		 * Calcul du coefficient de marée:
@@ -145,17 +286,56 @@ public class MareeTools {
 
 		 */
 		
-		double h = this.amplitude(horairePM);
-		h = h - this.amplitude(horaireBM);
+		double h = this.amplitudeSemiDiurne(horairePM, portId);
+		h = h - this.amplitudeSemiDiurne(horaireBM, portId);
 		h /= 2.0;
 		h = 100.0 * h / 3.05;
-		System.out.println("Coef :" + h);
-		
-				
+		System.out.println("Coef :" + h);	
 		return (h);
 	}
+	
+	//---------------------------------------------------------------------------
+	//-- pour le coef de maree on n'utilise que la marnage Semidiurne
+	//---------------------------------------------------------------------------
+	private double amplitudeSemiDiurne(long t, int portId) throws IOException, E4AException
+	{ 
+		if (!isHarmonicInitDone(portId))
+			initHarmonique (portId);
+		
+		Astronomie astrePosition = new Astronomie(t);
+		Ondes.InitEquilibriumAndPhase (astrePosition.s, astrePosition.h, astrePosition.p, astrePosition.p1, astrePosition.N);
+		double heureDecimal = astrePosition.heureDecimale;
 
-	public double getCoefMareeV2(double hauteurPM, double hauteurBM)
+		double amplitude = Ondes._Z0; // 0.;
+		double amplitudeDebug = Ondes._Z0; // 0.;
+		double var;
+		for (Onde o : Ondes._table2NC) {
+			
+			/* 
+			 * les ondes semii diurne on une speed comprise entre 12.85 et 16.1391017
+			 *     new ConstituantHarmoniqueUneOnde ( "2Q1"     , 1,-4, 1, 2, 0, -90, 12.8542862, UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.uO1,     UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.fO1),
+	   			   new ConstituantHarmoniqueUneOnde ( "OO1"     , 1, 2, 1, 0, 0, +90, 16.1391017, UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.uK2mQ1,  UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.fK2Q1), //like KQ1=K2-Q1
+			*/
+			if ((o._speed < 12) || (o._speed > 17))
+			{ 
+				var = Trigo.reduc360 (o._speed * heureDecimal + o._equilibrium - o._phase);
+				amplitudeDebug += o._nodeFactor * o._ampli * Trigo.cos_deg(var);
+				continue;
+			}
+
+			
+			if (o._ampli > 0.)
+			{ 
+				var = Trigo.reduc360 (o._speed * heureDecimal + o._equilibrium - o._phase);
+				amplitude +=      o._nodeFactor * o._ampli * Trigo.cos_deg(var);
+				amplitudeDebug += o._nodeFactor * o._ampli * Trigo.cos_deg(var);
+			}
+		}
+		System.out.println("heure - Ampli("+t+" - "+amplitudeDebug+") amplitude semi diurne :" + amplitude);
+		return amplitude;
+	}
+
+	public double getCoefMaree(double hauteurPM, double hauteurBM)
 	{
 		/*
 		 * Calcul du coefficient de marée:
@@ -205,178 +385,10 @@ public class MareeTools {
 		return (h);
 	}
 
-	public List<Double> getHoraireEtale()
-	{
-		ArrayList<Double> retour = new ArrayList<Double>();	
 
-		double h = this.heure_de_etale (0.0);
-		retour.add(Double.valueOf(h));
 
-		h = this.heure_de_etale (h + 5.0);
-		retour.add(Double.valueOf(h));
-		
-		h = this.heure_de_etale (h + 5.0);
-		retour.add(Double.valueOf(h));
-		
-		h = this.heure_de_etale (h + 5.0);
-		if (h < 24.0)
-			retour.add(Double.valueOf(h));
-		
-		return retour;
-	}
 
-	public List<Double> getHauteurEau(List<Double> horaire)
-	{
-		ArrayList<Double> retour = new ArrayList<Double>();	
-		for (Double h : horaire) 
-		{
-			double a = this.amplitude (h.doubleValue());
-			retour.add(Double.valueOf(a));
-		}
-		return retour;
-	}
-	
-	
 
-	//---------------------------------------------------------------------------
-	public double heure_de_etale(double t0) // heure de la marée en heures de 0.0 a 23.99
-	{ 
-		/* la hauteur de la maree est la fonction somme des composants,
-	     chaque composant étant de la forme acos(vt-p).
-	     La fonction dérivée =-vsin(vt-p) s'annule lorsque la fonction
-	     passe par un maxi (pleine mer) ou un mini (basse mer). Elle est
-	     positive lorsque la marée monte, et négative lorsque la marée
-	     descend. Plutôt que de rechercher les racines de la fonction dérivée,
-	     on a trouvé plus simple de procéder par approches successives.
-		 */
-
-		double t, dh;
-		// sens de la maree 1=maree montante 0=maree descendante
-		Boolean sens, sens0;
-
-		
-		//------------------------------------------------------------------------------
-		// est ce que je ne serais pas deja a l'etale ?
-		//------------------------------------------------------------------------------
-		dh = 0.5;                       // une demi-heure
-		sens0 = signe_derivee(t0);	    // sens de la marée a l'instant initial
-		// si 30 secondes avant, la marée n'était pas dans le même sens, c'est
-		// qu' elle a changé de sens entre-temps ! heure marée = instant initial
-		if (signe_derivee(t0 - 0.5*Trigo.uneminute) !=  sens0) return t0;
-
-		
-		//-----------------------------------------------------------------------------
-		// non alors je mouline de 1/2 heure en 1/2 heure jusqu'a l'etale
-		//-----------------------------------------------------------------------------
-		t = t0;			                // on part de l'instant initial
-		do                            // on va regarder
-		{ 
-			t = t + dh;		            // les demi-heures suivantes
-			sens = signe_derivee(t);    // quel est le sens de la marée
-		}
-		while (sens == sens0);	        // jusqu'à ce qu'elle change de sens
-		
-		// elle a changé de sens !
-		//-----------------------------------------------------------------------------
-		// OK j'y suis presque pour etre precis je vais mouliner en minute ce coup ci
-		//-----------------------------------------------------------------------------
-		sens0 = sens;	    	        // on note le nouveau sens
-		do			                // on revient en arriere
-		{ 
-			t = t - Trigo.uneminute;	        // minute par minute
-			sens = signe_derivee(t);	// tant que le sens
-		}
-		while (sens == sens0);	        // est toujours le même
-		// on a atteint le sens précédent ! t est l'heure de la marée
-
-		// si 30 secondes après, la marée était toujours dans le même sens
-		// on prend la minute suivante comme heure de la marée
-		if (signe_derivee( t + 0.5 * Trigo.uneminute) == sens) 
-			t = t + Trigo.uneminute;
-
-		return t;
-	}
-	
-	
-	//---------------------------------------------------------------------------
-	private Boolean signe_derivee(double t)
-	{ 
-		double sens = 0.;
-		double var;
-
-		for (Onde o : Ondes._table2NC) {			
-			if (o._ampli > 0.)
-			{ 
-				// la derivée est de la forme -vsin(vt-p)
-				var = Trigo.reduc360 (o._speed * t + o._equilibrium - o._phase);
-				sens -= o._nodeFactor * o._ampli * o._speed * Trigo.sin_deg(var);
-			}
-		}
-		
-		// return 1 si étale ou marée montante, 0 si marée descendante
-		return (sens >= 0.);
-	}
-
-	
-	//---------------------------------------------------------------------------
-	public double amplitude(double t)
-	{ 
-		double amplitude = cHarmo._Z0; // 0.;
-		double var;
-		for (int i = 0; i < cHarmo.getNbOnde(); i++)
-		{
-			if (cHarmo._table2NC[i].ampli > 0.)
-			{ 
-				var = TrigoEtConstante.reduc360 (cHarmo._table2NC[i].speed * t + equilbrm[i] - cHarmo._table2NC[i].phase);
-				amplitude += nodefctr[i] * cHarmo._table2NC[i].ampli * TrigoEtConstante.cos_deg(var);
-			}
-		}
-		return amplitude;
-	}
-
-	//---------------------------------------------------------------------------
-	//-- pour le coef de maree on n'utilise que la marnage Semidiurne
-	//---------------------------------------------------------------------------
-	public double amplitudeSemiDiurne(double t)
-	{ 
-		double amplitude = cHarmo._Z0; // 0.;
-		double amplitudeDebug = cHarmo._Z0; // 0.;
-		double var;
-		for (int i = 0; i < cHarmo.getNbOnde(); i++)
-		{
-			
-			/* 
-			 * les ondes semii diurne on une speed comprise entre 12.85 et 16.1391017
-			 *     new ConstituantHarmoniqueUneOnde ( "2Q1"     , 1,-4, 1, 2, 0, -90, 12.8542862, UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.uO1,     UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.fO1),
-	   			   new ConstituantHarmoniqueUneOnde ( "OO1"     , 1, 2, 1, 0, 0, +90, 16.1391017, UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.uK2mQ1,  UcorrectionNodalePhase_and_FfacteurCorrectionNodaleAmplitude.fK2Q1), //like KQ1=K2-Q1
-			*/
-			if ((cHarmo._table2NC[i].speed < 12) || (cHarmo._table2NC[i].speed > 17))
-			{ 
-				var = TrigoEtConstante.reduc360 (cHarmo._table2NC[i].speed * t + equilbrm[i] - cHarmo._table2NC[i].phase);
-				amplitudeDebug += nodefctr[i] * cHarmo._table2NC[i].ampli * TrigoEtConstante.cos_deg(var);
-				continue;
-			}
-
-			
-			if (cHarmo._table2NC[i].ampli > 0.)
-			{ 
-				var = TrigoEtConstante.reduc360 (cHarmo._table2NC[i].speed * t + equilbrm[i] - cHarmo._table2NC[i].phase);
-				amplitude +=      nodefctr[i] * cHarmo._table2NC[i].ampli * TrigoEtConstante.cos_deg(var);
-				amplitudeDebug += nodefctr[i] * cHarmo._table2NC[i].ampli * TrigoEtConstante.cos_deg(var);
-			}
-		}
-		System.out.println("heure - Ampli("+t+" - "+amplitudeDebug+") amplitude semi diurne :" + amplitude);
-		return amplitude;
-	}
-
-	//---------------------------------------------------------------------------
-	private double amplimax()
-	{ 
-		double ampmax = 0.;
-		for (int i=0;i<cHarmo.getNbOnde();i++)
-			ampmax = ampmax + cHarmo._table2NC[i].ampli;
-		return ampmax;
-	}
 	//---------------------------------------------------------------------------	
 	private boolean isHarmonicInitDone (int portID) {
 		if (_portIDInit == portID)  return true;
@@ -395,7 +407,7 @@ public class MareeTools {
 			throw new E4AException("PortId unknown");
 			
 		if (portId == 3) 
-			portHarmonique = new File ("E:\\WS\\GitHubPerso\\Cleyo\\MarrePredictionHarmonique\\DataNotInGit\\Brest\\Harmonique2020.txt");
+			portHarmonique = new File ("E:\\WS\\GitHubPerso\\Cleyo\\MarrePredictionHarmonique\\data\\Brest\\Harmonique2020.txt");
 
 		HashMap<String, HarmoniqueInfo> allHarmoniques = this.getHarmoniqueFromFile(portHarmonique);
 		Ondes._Z0 = allHarmoniques.get("Z0").amplitude;

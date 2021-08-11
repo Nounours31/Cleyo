@@ -6,6 +6,12 @@ public class Trigo {
 	public static final double Rad2Deg = (180.0 / Math.PI);
 	public static final double uneminute = 1.0 / 24.0;
 
+	public static final long DemiMinuteEpoch =  500 * 60;
+	public static final long UneMinuteEpoch  = 1000 * 60;
+	public static final long DemiHeureEpoch  =  500 * 3600; // 0.5 * 1000 * 3600;
+	public static final long UneHeureEpoch   = 1000 * 3600;
+	public static final long JourneeComplete = UneHeureEpoch * 24;
+
 	public static double reduc360(double d) {
 		while (d >= 360.0)
 			d -= 360.0;

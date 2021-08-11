@@ -5,7 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TimeZone;
 
+import sfa.dev.maree.harmonique.model.computeportmaree.HoraireMaree;
 import sfa.dev.maree.harmonique.model.computeportmaree.MareeTools;
+
 import sfa.dev.maree.tools.MareeEnv;
 
 
@@ -28,36 +30,45 @@ public class ComputeMareeDeUnPort {
 		
 		
 		
-		List<Double> infomaree = mareeTools.MarreGrammeduJour();
+		
+		long epochMinuit = _sdf.parse("2021/08/11 00:00:01").getTime();	
+		List<HoraireMaree> infomaree = mareeTools.MarreGrammeduJour(epochMinuit, MareeEnv.IdREFMAR_BREST);
+		System.out.println("Maree gramme");
 		for (int i = 0; i < infomaree.size(); i++)
 		{
-			System.out.println("Amplitude [heure" + i + "] = " + infomaree.get(i));
+			System.out.println(infomaree.get(i).toString());
 		}
 		
-		List<Double> horaireEtale = mareeTools.getHoraireEtale();
-		List<Double> hauteurEtale = mareeTools.getHauteurEau(horaireEtale);
+		List<Long> horaireEtale = mareeTools.getHoraireEtale(epochMinuit, MareeEnv.IdREFMAR_BREST);
+		List<HoraireMaree> hauteurEtale = mareeTools.getHauteurEau(horaireEtale, MareeEnv.IdREFMAR_BREST);
+		System.out.println("Recherche des Etales de maree");
 		for (int i = 0; i < horaireEtale.size(); i++)
 		{
-			System.out.println("Etale  " + mareeTools.CouvHeureInDoubleToHeureTXT(horaireEtale.get(i)) + " Amplitude = " +  hauteurEtale.get(i));
+			System.out.println(hauteurEtale.get(i));
 		}
 
-		List<Double> PM = new ArrayList<Double>(); 
-		List<Double> BM = new ArrayList<Double>(); 
-		pa.InfoMareeJour(PM, BM);
-		int j = 0;
-		for (int i = 0; i < PM.size();)
+		
+		
+		List<HoraireMaree> PM = new ArrayList<HoraireMaree>(); 
+		List<HoraireMaree> BM = new ArrayList<HoraireMaree>(); 
+		mareeTools.InfoMareeJour(epochMinuit, MareeEnv.IdREFMAR_BREST, PM, BM);
+		
+		System.out.println("Les PMs:");
+		for (int i = 0; i < PM.size(); i++)
 		{
-			System.out.println("PM  horaire" + mareeTools.CouvHeureInDoubleToHeureTXT(PM.get(i++)) + " Amplitude = " + PM.get(i++) + " Coef = undef");
+			System.out.println(PM.get(i).toString());
 		}
-		for (int i = 0; i < BM.size();)
+		System.out.println("Les BMs:");
+		for (int i = 0; i < BM.size(); i++)
 		{
-			System.out.println("BM  horaire" + mareeTools.CouvHeureInDoubleToHeureTXT(BM.get(i++)) + " Amplitude = " + BM.get(i++) );
+			System.out.println(BM.get(i).toString());
 		}
 		
-		System.out.println("PM1" + mareeTools.CouvHeureInDoubleToHeureTXT(PM.get(0)));
-		mareeTools.getCoefMaree(PM.get(0), BM.get(0));
-		System.out.println("PM2" + mareeTools.CouvHeureInDoubleToHeureTXT(PM.get(2)));
-		mareeTools.getCoefMaree(PM.get(2), BM.get(2));
+		double coef = mareeTools.getCoefMaree(PM.get(0).hauteur, BM.get(0).hauteur);
+		System.out.println("Coef: " + coef);
+
+		coef = mareeTools.getCoefMaree(PM.get(1).hauteur, BM.get(1).hauteur);
+		System.out.println("Coef: " + coef);
 
 		
 	}
