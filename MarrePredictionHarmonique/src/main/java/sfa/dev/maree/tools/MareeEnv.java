@@ -2,7 +2,7 @@ package sfa.dev.maree.tools;
 
 import java.io.File;
 
-public class Env {
+public class MareeEnv {
 
 	private static String RepDonnee = "E:\\WS\\svn\\maree\\data";
 	private static String RepDonneeDownload = "E:\\WS\\svn\\maree\\data\\download";
@@ -11,11 +11,11 @@ public class Env {
 
 	
 	private static String WSBase = "E:/WS/GitHubPerso/Cleyo/MarrePredictionHarmonique";
-	private static String RepCoef = Env.WSBase + File.separatorChar + "Data";
+	private static String RepCoef = MareeEnv.WSBase + File.separatorChar + "Data";
 
 	public static String getRepCoef() {
 		return RepCoef;
 	}
 
-	
+	public final static int IdREFMAR_BREST = 3;
 }

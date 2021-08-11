@@ -1,25 +1,25 @@
-package sfa.dev.maree.tools;
+package sfa.dev.generique.tools;
 
 
-public class SfaError  {
-	public static final SfaError None = new SfaError ();
-	public static final SfaError Fail = new SfaError (1, "Unknown");
+public class E4AError  {
+	public static final E4AError None = new E4AError ();
+	public static final E4AError Fail = new E4AError (1, "Unknown");
 
 	private int _code;
 	private String _msg;
 
-	public SfaError() {
+	public E4AError() {
 		_code = 0;
 		_msg = "SUCCESS";
 	}
 
 
-	public SfaError(int i, String message) {
+	public E4AError(int i, String message) {
 		_code = i;
 		_msg = message;
 	}
 
-	public SfaError(String message) {
+	public E4AError(String message) {
 		_code = 1;
 		_msg = message;
 	}

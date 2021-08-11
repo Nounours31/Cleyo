@@ -1,27 +1,27 @@
-package sfa.dev.maree.tools;
+package sfa.dev.generique.tools;
 
-public class SfaException extends Exception {
+public class E4AException extends Exception {
 
-	public SfaException() {
+	public E4AException() {
 		// TODO Auto-generated constructor stub
 	}
 
-	public SfaException(String message) {
+	public E4AException(String message) {
 		super(message);
 		// TODO Auto-generated constructor stub
 	}
 
-	public SfaException(Throwable cause) {
+	public E4AException(Throwable cause) {
 		super(cause);
 		// TODO Auto-generated constructor stub
 	}
 
-	public SfaException(String message, Throwable cause) {
+	public E4AException(String message, Throwable cause) {
 		super(message, cause);
 		// TODO Auto-generated constructor stub
 	}
 
-	public SfaException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+	public E4AException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
 		super(message, cause, enableSuppression, writableStackTrace);
 		// TODO Auto-generated constructor stub
 	}
