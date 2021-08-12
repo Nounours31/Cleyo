@@ -1,13 +1,11 @@
 package sfa.dev.generique.tools;
 
-import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Locale;
+import sfa.dev.maree.tools.MareeEnv;
 
 public final class E4ALogger {
 	private static eE4ALoggerLevel _envLevel = eE4ALoggerLevel.fatal;
 	private String _id = null;
-	private final SimpleDateFormat sdf = new SimpleDateFormat("[MM-dd_HH:mm:ss]", Locale.US); 
 	
 	public static void setEnvLevel (String x) {
 		if (x == null) {
@@ -72,7 +70,7 @@ public final class E4ALogger {
 	private synchronized void _log (eE4ALoggerLevel l, String msg) {
 		if (this.isActive(l)) {
 			StringBuffer sb = new StringBuffer();
-			sb.append(sdf.format(new Date()));
+			sb.append(MareeEnv._sdfLog.format(new Date()));
 			sb.append(String.format("[%c>%c][%s]", l.getCode(), E4ALogger._envLevel.getCode(), _id));
 			sb.append(msg);
 			System.err.println(sb.toString());

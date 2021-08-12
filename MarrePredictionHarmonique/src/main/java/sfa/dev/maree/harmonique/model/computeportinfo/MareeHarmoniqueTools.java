@@ -6,7 +6,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.TimeZone;
 
 import org.json.JSONArray;
@@ -19,6 +18,7 @@ import sfa.dev.maree.harmonique.model.Astronomie;
 import sfa.dev.maree.harmonique.model.Onde;
 import sfa.dev.maree.harmonique.model.Ondes;
 import sfa.dev.maree.harmonique.model.Trigo;
+import sfa.dev.maree.tools.MareeEnv;
 
 
 
@@ -32,9 +32,6 @@ public class MareeHarmoniqueTools {
 			return String.format("TimeStamp: %d --- Hauteur: %f", epoch, hauteur);
 		}
 	}
-	
-	
-	static SimpleDateFormat _sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss"); 
 	E4ALogger _logger = E4ALogger.getLogger(MareeHarmoniqueTools.class.getCanonicalName());
 			
 	
@@ -45,7 +42,7 @@ public class MareeHarmoniqueTools {
 		// ------------------------------------
 		// UTC
 		// ------------------------------------
-		_sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+		MareeEnv._sdfCode.setTimeZone(TimeZone.getTimeZone("UTC"));
 		
 		// ------------------------------------
 		// Read donnee de maree de un port
@@ -69,7 +66,7 @@ public class MareeHarmoniqueTools {
         	double hauteur = uneSonde.getDouble("value");
         	_logger.lowest(String.format("TimeStamp: %s --- Hauteur: %f", timeStamp, hauteur));
         	
-        	long epoch = _sdf.parse (timeStamp).getTime();        	
+        	long epoch = MareeEnv._sdfCode.parse (timeStamp).getTime();        	
         	_data[iIndice] = new CoupleEpochHauteur();
         	_data[iIndice].epoch = epoch;
         	_data[iIndice].hauteur = hauteur;

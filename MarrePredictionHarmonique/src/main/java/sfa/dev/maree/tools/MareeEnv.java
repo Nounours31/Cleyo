@@ -1,21 +1,28 @@
 package sfa.dev.maree.tools;
 
-import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import java.util.TimeZone;
 
 public class MareeEnv {
 
-	private static String RepDonnee = "E:\\WS\\svn\\maree\\data";
-	private static String RepDonneeDownload = "E:\\WS\\svn\\maree\\data\\download";
-	private static String RepDonneeDownloadCorrigee = "E:\\WS\\svn\\maree\\data\\downloadCorrigee";
-	private static String RepDonneeCheck = "E:\\WS\\svn\\maree\\data\\Check";
-
+	public final static int IdREFMAR_BREST = 3;
 	
-	private static String WSBase = "E:/WS/GitHubPerso/Cleyo/MarrePredictionHarmonique";
-	private static String RepCoef = MareeEnv.WSBase + File.separatorChar + "Data";
+	public static SimpleDateFormat _sdfCode = null;
+	public static SimpleDateFormat _sdfLog = null;
+	public static SimpleDateFormat _sdfUI = null;
+	public static boolean isInit = MareeEnv.initAll();
+	
+	static final private boolean initAll()  {
+		_sdfCode = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.FRANCE); 
+		_sdfCode.setTimeZone(TimeZone.getTimeZone("UTC"));
 
-	public static String getRepCoef() {
-		return RepCoef;
+		_sdfUI = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.FRANCE); 
+		_sdfUI.setTimeZone(TimeZone.getTimeZone("CET"));
+
+		_sdfLog = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.FRANCE); 
+		_sdfLog.setTimeZone(TimeZone.getTimeZone("CET"));
+		return true;
 	}
 
-	public final static int IdREFMAR_BREST = 3;
 }

@@ -1,10 +1,10 @@
 package sfa.dev.maree.harmonique.model;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
 import sfa.dev.generique.tools.E4ALogger;
+import sfa.dev.maree.tools.MareeEnv;
 
 
 
@@ -15,7 +15,7 @@ public class Astronomie
 	public double p;			// longitude of lunar perigee
 	public double p1;			// longitude of solar perigee
 	public double N;			// longitude of moon's node
-	private E4ALogger _log = E4ALogger.getLogger(Astronomie.class.getCanonicalName());
+	private static E4ALogger _log = E4ALogger.getLogger(Astronomie.class.getCanonicalName());
 	public double heureDecimale;
 	private static GregorianCalendar StartofReform = Astronomie.InitReform();
 
@@ -79,18 +79,31 @@ public class Astronomie
 
 
 	public double Epoch2HeureDecimalDuJour (long epochMaree) 
-	{		
-		GregorianCalendar start = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
-		start.setTimeInMillis(epochMaree);
-
-		double HeureDecimale = (double)start.get (Calendar.SECOND);
-		HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.MINUTE)));
-		HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.HOUR_OF_DAY)));
+	{
+		boolean useOldCodeOK = false;
+		double HeureDecimale = 0.0;
+		if (useOldCodeOK) {
+			GregorianCalendar start = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
+			start.setTimeInMillis(epochMaree);
+	
+			HeureDecimale = (double)start.get (Calendar.SECOND);
+			HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.MINUTE)));
+			HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.HOUR_OF_DAY)));
+		}
+		else {
+			GregorianCalendar start = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
+			start.setTimeInMillis(epochMaree);
+	
+			HeureDecimale = (double)start.get (Calendar.SECOND);
+			HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.MINUTE)));
+			HeureDecimale = (double) (HeureDecimale / 60.0 + (double)(start.get (Calendar.HOUR_OF_DAY)));			
+		}
 		return HeureDecimale;
 	}
 
 	public double Epoch2JourDecimal (long epochMaree) 
-	{		
+	{	
+		_log.lowest("Epoch2JourDecimal Start");
 		GregorianCalendar start = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
 		start.setTimeInMillis(epochMaree);
 
@@ -114,13 +127,14 @@ public class Astronomie
 		if (start.before(StartofReform))
 			B = 0;
 
-		_log.debug("D = " + D);
-		_log.debug("M = " + M);
-		_log.debug("Y = " + Y);
-		_log.debug("A = " + A);
-		_log.debug("B = " + B);
+		_log.lowest("D = " + D);
+		_log.lowest("M = " + M);
+		_log.lowest("Y = " + Y);
+		_log.lowest("A = " + A);
+		_log.lowest("B = " + B);
 
 		double jourDecimal = (double) ((int)(365.25 * (Y + 4716)) + (int)(30.6001 * (M + 1)) + D + B - 1524.5);
+		_log.lowest("Epoch2JourDecimal End - Jour decimal: " + jourDecimal);
 		return jourDecimal;
 	}
 
@@ -168,8 +182,23 @@ public class Astronomie
 		int Seconde = (int)(_Seconde);
 
 		GregorianCalendar retour = new GregorianCalendar(Year, Mois - 1, (int)Jour, Heure, Minute, Seconde);
-		_log.debug("GregorianCalendar = " + retour);
+		_log.debug("GregorianCalendar [en UTC (= CET-2:00)] " + MareeEnv._sdfCode.format(retour));
 
 		return retour.getTimeInMillis();
+	}
+
+
+	public static boolean isEpochJourDifferent(long j1, long j2) {
+		GregorianCalendar start = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
+		start.setTimeInMillis(j1);
+
+		GregorianCalendar end = new GregorianCalendar (TimeZone.getTimeZone("UTC"));
+		end.setTimeInMillis(j2);
+		
+		boolean rc = (start.get (Calendar.DAY_OF_MONTH) != end.get (Calendar.DAY_OF_MONTH)); 
+		if (rc) {
+			_log.debug("Warning two differents days: [en UTC (= CET-2:00)] " + MareeEnv._sdfCode.format(start.getTime()) + " --VS-- "  + MareeEnv._sdfCode.format(end.getTime()));
+		}
+		return rc;
 	}
 }

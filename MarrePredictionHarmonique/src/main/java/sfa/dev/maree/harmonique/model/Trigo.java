@@ -11,6 +11,7 @@ public class Trigo {
 	public static final long DemiHeureEpoch  =  500 * 3600; // 0.5 * 1000 * 3600;
 	public static final long UneHeureEpoch   = 1000 * 3600;
 	public static final long JourneeComplete = UneHeureEpoch * 24;
+	public static final double MilliSecEpoch2HeureDecimale = (1.0 / (1000.0 * 60 * 24));
 
 	public static double reduc360(double d) {
 		while (d >= 360.0)

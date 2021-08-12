@@ -6,6 +6,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
@@ -14,27 +15,27 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import sfa.dev.generique.tools.E4AException;
+import sfa.dev.generique.tools.E4ALogger;
 import sfa.dev.maree.harmonique.model.Astronomie;
 import sfa.dev.maree.harmonique.model.Onde;
 import sfa.dev.maree.harmonique.model.Ondes;
 import sfa.dev.maree.harmonique.model.Trigo;
+import sfa.dev.maree.tools.MareeEnv;
 
 
 public class MareeTools {
 	class HarmoniqueInfo {
 		double amplitude, phase;
 	}
-
-
-	
 	private static int _portIDInit = -1;
-	
+	E4ALogger _logger = E4ALogger.getLogger(MareeTools.class.getCanonicalName());
 	
 	
 	// --------------------------------------------------------
 	// hauteur d'eau a une heure donnee
 	// --------------------------------------------------------
 	public double ComputeHauteurMaree(long heure, int portId) throws IOException, E4AException {
+		_logger.debug(String.format("ComputeHauteurMaree - Start epoch: %d [heure CET: %s] - port: %d [port static: %d]", heure, MareeEnv._sdfUI.format(new Date(heure)), portId, _portIDInit));
 		if (!isHarmonicInitDone(portId))
 			initHarmonique (portId);
 		
@@ -54,6 +55,7 @@ public class MareeTools {
 				hauteur += o._nodeFactor * o._ampli * Trigo.cos_deg(var);
 			}
 		}
+		_logger.debug("ComputeHauteurMaree - h:" + hauteur);
 		return hauteur;
 	}
 	
@@ -76,10 +78,18 @@ public class MareeTools {
 	
 	
 	// --------------------------------------------------------
-	// Besoin de la deribee pour la recherche des etales
+	// Besoin de la derivee pour la recherche des etales
 	// --------------------------------------------------------
-	private boolean signe_derivee(long heure, int portId) throws IOException, E4AException
+	// -----------------------------------------
+	// le 2021-08-12 : pb de precision au passage de minuit dans la calcul de la derivee
+	// Pour eviter ce pb, je met un local offset autour de minuit ...
+	// il faut envoye la date (du jour courant + offset (< 0 pour passer au jour precedent) (> 0 jour suivant)
+	// en conservant le jour de ref pour etre Continue dans les calcul de la derivee
+	// ne faire cela que +/- 1/2 heure de minuit ....
+	// -----------------------------------------
+	private boolean signe_derivee(long heure, double localOffsetEnHeureDecimale, int portId) throws IOException, E4AException
 	{ 
+		_logger.debug(String.format("signe_derivee - Start epoch: %d [heure CET: %s] - port: %d [port static: %d]", heure, MareeEnv._sdfUI.format(new Date(heure)), portId, _portIDInit));
 		if (!isHarmonicInitDone(portId))
 			initHarmonique (portId);
 		
@@ -87,6 +97,10 @@ public class MareeTools {
 		Ondes.InitEquilibriumAndPhase (astrePosition.s, astrePosition.h, astrePosition.p, astrePosition.p1, astrePosition.N);
 		double heureDecimal = astrePosition.heureDecimale;
 
+		// -----------------------------------------
+		// le 2021-08-12 : cf commentaire
+		// -----------------------------------------
+		heureDecimal += localOffsetEnHeureDecimale;
 		
 		double sens = 0.;
 		double var;
@@ -101,7 +115,9 @@ public class MareeTools {
 		}
 		
 		// return 1 si étale ou marée montante, 0 si marée descendante
-		return (sens >= 0.);
+		boolean bSens = (sens >= 0.);
+		_logger.debug("Sens: " + (bSens ? "Montante" : "Descendante") + " - Gradiant: " + sens);
+		return bSens;
 	}
 	
 	
@@ -133,6 +149,7 @@ public class MareeTools {
 	// --------------------------------------------------------
 	private long heureEtaleDeMaree(long EpochDebutDerecherche, int portId) throws IOException, E4AException // heure de la marée en heures de 0.0 a 23.99
 	{ 
+		_logger.debug(String.format("heureEtaleDeMaree - Start epoch: %d [heure CET: %s] - port: %d [port static: %d]", EpochDebutDerecherche, MareeEnv._sdfUI.format(new Date(EpochDebutDerecherche)), portId, _portIDInit));
 		/* 
 		 la hauteur de la maree est la fonction somme des composants,
 	     chaque composant étant de la forme acos(vt-p).
@@ -143,7 +160,8 @@ public class MareeTools {
 	     on a trouvé plus simple de procéder par approches successives.
 		 */
 
-		long t, dh;
+		long t, t_next, pas; 
+		long dh = Trigo.DemiHeureEpoch; // une demi-heure en epoch
 		// sens de la maree 1=maree montante 0=maree descendante
 		Boolean sens, sens0;
 
@@ -151,20 +169,48 @@ public class MareeTools {
 		//------------------------------------------------------------------------------
 		// est ce que je ne serais pas deja a l'etale ?
 		//------------------------------------------------------------------------------
-		dh = Trigo.DemiHeureEpoch;                       // une demi-heure en epoch
-		sens0 = signe_derivee(EpochDebutDerecherche, portId);	    // sens de la marée a l'instant initial
-		if (signe_derivee(EpochDebutDerecherche - Trigo.DemiMinuteEpoch, portId) !=  sens0) 
+		sens0 = signe_derivee(EpochDebutDerecherche, 0.0, portId);	    // sens de la marée a l'instant initial
+
+		// --------------
+		// pb du passage de minuit
+		// --------------
+		double localOffsetEnHeureDecimale = 0.0;
+		if (Astronomie.isEpochJourDifferent (EpochDebutDerecherche, EpochDebutDerecherche - Trigo.DemiMinuteEpoch)) {
+			localOffsetEnHeureDecimale = -(((double)Trigo.DemiMinuteEpoch) * Trigo.MilliSecEpoch2HeureDecimale);
+		}
+		else {
+			localOffsetEnHeureDecimale = 0.0;
+			EpochDebutDerecherche = EpochDebutDerecherche - Trigo.DemiMinuteEpoch;
+		}
+		
+		if (signe_derivee(EpochDebutDerecherche, localOffsetEnHeureDecimale, portId) !=  sens0) {
+			_logger.debug(String.format("Etale trouvee [-Directe-] a epoch: %d [heure CET: %s]", EpochDebutDerecherche - Trigo.DemiMinuteEpoch, MareeEnv._sdfUI.format(new Date(EpochDebutDerecherche - Trigo.DemiMinuteEpoch))));
 			return EpochDebutDerecherche; // si sens inverse c'est que je l'ai trouvee
+		}
 
 		
 		//-----------------------------------------------------------------------------
 		// non alors je mouline de 1/2 heure en 1/2 heure jusqu'a l'etale
 		//-----------------------------------------------------------------------------
 		t = EpochDebutDerecherche;			                // on part de l'instant initial
+		t_next = EpochDebutDerecherche;			                // on part de l'instant initial
 		do                            // on va regarder
 		{ 
-			t = t + dh;		            // les demi-heures suivantes
-			sens = signe_derivee(t, portId);    // quel est le sens de la marée
+			t_next = t + dh;		            // les demi-heures suivantes
+			localOffsetEnHeureDecimale = 0.0;
+			if (Astronomie.isEpochJourDifferent (t, t_next)) {
+				localOffsetEnHeureDecimale = (((double)dh) * Trigo.MilliSecEpoch2HeureDecimale);
+			}
+			else {
+				localOffsetEnHeureDecimale = 0.0;
+				t = t_next;
+			}
+			sens = signe_derivee(t, localOffsetEnHeureDecimale, portId);    // quel est le sens de la marée
+			
+			// continuer a avancer
+			if (localOffsetEnHeureDecimale > 0.0)
+				t = t_next;
+			
 		}
 		while (sens == sens0);	        // jusqu'à ce qu'elle change de sens
 		
@@ -173,19 +219,32 @@ public class MareeTools {
 		// OK j'y suis presque pour etre precis je vais mouliner en minute ce coup ci
 		//-----------------------------------------------------------------------------
 		sens0 = sens;	    	        // on note le nouveau sens
+		pas = 0;
 		do			                // on revient en arriere
 		{ 
-			t = t - Trigo.UneMinuteEpoch;	        // minute par minute
-			sens = signe_derivee(t, portId);	// tant que le sens
+			pas = pas - Trigo.UneMinuteEpoch;	        // minute par minute
+			
+			localOffsetEnHeureDecimale = 0.0;
+			if (Astronomie.isEpochJourDifferent (t, t + pas)) {
+				localOffsetEnHeureDecimale = (((double)pas) * Trigo.MilliSecEpoch2HeureDecimale);
+			}
+			else {
+				localOffsetEnHeureDecimale = 0.0;
+				t = t + pas;
+				pas = 0;
+			}
+
+			sens = signe_derivee(t, localOffsetEnHeureDecimale, portId);	// tant que le sens
 		}
 		while (sens == sens0);	        // est toujours le même
 		// on a atteint le sens précédent ! t est l'heure de la marée
 
 		// si 30 secondes après, la marée était toujours dans le même sens
 		// on prend la minute suivante comme heure de la marée
-		if (signe_derivee( t + Trigo.DemiMinuteEpoch, portId) == sens) 
+		if (signe_derivee( t + Trigo.DemiMinuteEpoch, 0.0, portId) == sens) 
 			t = t + Trigo.DemiMinuteEpoch;
 
+		_logger.debug(String.format("Etale trouvee a epoch: %d [heure CET: %s]", t, MareeEnv._sdfUI.format(new Date(t))));
 		return t;
 	}
 	
@@ -196,15 +255,15 @@ public class MareeTools {
 		long h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
 		retour.add(h);
 
-		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		EpochDebutDerecherche = h + (5 * Trigo.UneHeureEpoch);
 		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
 		retour.add(h);
 		
-		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		EpochDebutDerecherche = h + (5 * Trigo.UneHeureEpoch);
 		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
 		retour.add(h);
 		
-		EpochDebutDerecherche += (5 * Trigo.UneHeureEpoch);
+		EpochDebutDerecherche = h + (5 * Trigo.UneHeureEpoch);
 		h = this.heureEtaleDeMaree (EpochDebutDerecherche, portId);
 		if ((h - EpochDebutDerecherche) < Trigo.JourneeComplete)
 			retour.add(h);

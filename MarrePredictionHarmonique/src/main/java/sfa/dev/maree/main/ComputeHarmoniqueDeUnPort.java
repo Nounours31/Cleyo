@@ -1,4 +1,4 @@
-package sfa.dev.maree.mains;
+package sfa.dev.maree.main;
 
 import java.io.IOException;
 import java.text.ParseException;
