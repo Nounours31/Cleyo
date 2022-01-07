@@ -17,3 +17,5 @@ Archives/
 GraddleUserHome/
 Java8/
 /bin/
+/.settings/
+*.classpath

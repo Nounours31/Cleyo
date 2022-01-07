@@ -1,6 +1,7 @@
 package sfa.dev.generique.tools;
 
 import java.util.Date;
+
 import sfa.dev.maree.tools.MareeEnv;
 
 public final class E4ALogger {
