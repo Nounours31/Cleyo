@@ -16,7 +16,7 @@ import javax.mail.internet.MimeMessage;
 public class E4ASendMail {
 	private final static String usermail="code.fages@gmail.com";
 	private final static String username="code.fages@gmail.com";
-	private final static String password="bquwznpbkgneytku"; // mot de passe applicatif
+	private final static String password="-"; // mot de passe applicatif
 	
 	private final static HashMap<String, String> _Properties = InitProp();
 	private E4ALogger _logger = null;
